@@ -128,6 +128,17 @@ DEFAULT_KEYPOINT_NAMES = [
     "right_ankle",
 ]
 
+_PERSON_KEYPOINT_COUNT = 13
+_LEGACY_PERSON_KEYPOINT_COUNT = 12
+
+
+def _expand_legacy_keypoint_names(names: list[str]) -> list[str]:
+    if len(names) != _LEGACY_PERSON_KEYPOINT_COUNT:
+        return names
+    if names == [str(index) for index in range(1, _PERSON_KEYPOINT_COUNT)]:
+        return [str(index) for index in range(1, _PERSON_KEYPOINT_COUNT + 1)]
+    return ["head", *names]
+
 
 class YoloPoseEstimationFunction(YoloFunctionWithShapes):
     # Offset applied to the class ID to derive the ID of the corresponding "<name>-box" label,
@@ -138,7 +149,9 @@ class YoloPoseEstimationFunction(YoloFunctionWithShapes):
         if keypoint_names_path is None:
             self._keypoint_names = DEFAULT_KEYPOINT_NAMES
         else:
-            self._keypoint_names = self._load_names(keypoint_names_path)
+            self._keypoint_names = _expand_legacy_keypoint_names(
+                self._load_names(keypoint_names_path)
+            )
 
         super().__init__(model, **kwargs)
 
@@ -152,17 +165,52 @@ class YoloPoseEstimationFunction(YoloFunctionWithShapes):
             ]
 
     def _label_specs(self, name: str, id_: int) -> Iterable[models.PatchedLabelRequest]:
+        skeleton_name = name
+        box_name = f"{name}-box"
+        if len(self._keypoint_names) == _PERSON_KEYPOINT_COUNT:
+            skeleton_name = name if name.endswith("-13") else f"{name}-13"
+            box_name = f"{name.removesuffix('-13')}-box"
+
         return [
             cvataa.skeleton_label_spec(
-                name,
+                skeleton_name,
                 id_,
                 [
                     cvataa.keypoint_spec(kp_name, kp_id)
                     for kp_id, kp_name in enumerate(self._keypoint_names)
                 ],
             ),
-            cvataa.label_spec(f"{name}-box", id_ + self._BOX_LABEL_ID_OFFSET, type="rectangle"),
+            cvataa.label_spec(box_name, id_ + self._BOX_LABEL_ID_OFFSET, type="rectangle"),
         ]
+
+    def _keypoint_annotations(self, box, kps, kp_confs):
+        keypoint_offset = 0
+        if (
+            len(kps) == _LEGACY_PERSON_KEYPOINT_COUNT
+            and len(self._keypoint_names) == _PERSON_KEYPOINT_COUNT
+        ):
+            x_min, y_min, x_max, _ = box.tolist()
+            yield cvataa.keypoint(
+                0,
+                [(x_min + x_max) / 2, y_min],
+                outside=False,
+                occluded=True,
+            )
+            keypoint_offset = 1
+        elif len(kps) != len(self._keypoint_names):
+            raise ValueError(
+                f"Model returned {len(kps)} keypoints, but the annotation schema "
+                f"defines {len(self._keypoint_names)}"
+            )
+
+        yield from (
+            cvataa.keypoint(
+                kp_index + keypoint_offset,
+                kp.tolist(),
+                outside=kp_conf.item() < 0.5,
+            )
+            for kp_index, (kp, kp_conf) in enumerate(zip(kps, kp_confs))
+        )
 
     def _annotations_from_results(self, results: Results) -> Iterable[cvataa.DetectionAnnotation]:
         for group_id, (label, box, kps, kp_confs) in enumerate(
@@ -181,10 +229,7 @@ class YoloPoseEstimationFunction(YoloFunctionWithShapes):
             )
             yield cvataa.skeleton(
                 label_id,
-                [
-                    cvataa.keypoint(kp_index, kp.tolist(), outside=kp_conf.item() < 0.5)
-                    for kp_index, (kp, kp_conf) in enumerate(zip(kps, kp_confs))
-                ],
+                list(self._keypoint_annotations(box, kps, kp_confs)),
                 group=group_id,
             )
 

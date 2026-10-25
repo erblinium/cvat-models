@@ -48,3 +48,9 @@ This function also supports the following options:
 
   The `<path>` must point to a text file, with one keypoint name per line. Leading and trailing
   whitespace will be ignored, and so will empty lines.
+
+  A 12-keypoint person schema is expanded to the 13-keypoint `person-13` schema automatically.
+  The original points are shifted after a synthetic head at the top-center of the detected box.
+  The synthetic head is marked with visibility 1. Native 13-keypoint model output is passed
+  through without adding a point. In both cases, the grouped rectangle label remains
+  `person-box`.
