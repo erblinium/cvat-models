@@ -16,3 +16,7 @@ For more information on how to run agents refer to our guides:
 
 - [Running cvat agents with Helm](https://docs.cvat.ai/docs/guides/helm-agents-userguide/)
 - [Running cvat agents with Docker Compose](https://docs.cvat.ai/docs/guides/compose-agents-userguide/)
+
+
+# Running auto-label with cmd line
+cvat-cli --server-host http://strix-ml.nov.com:8080 --auth "erblin.ujkani@nov.com" task auto-annotate 1 --function-file detector/yolo/func.py -p model=str:"/home/strix/cvat-labeling/pd-custom-cvat-model/modelv2.8.pt" -p keypoint_names_path=str:"/home/strix/cvat-labeling/pd-custom-cvat-model/keypoint-12.txt" --clear-existing

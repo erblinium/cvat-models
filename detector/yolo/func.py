@@ -130,6 +130,7 @@ DEFAULT_KEYPOINT_NAMES = [
 
 _PERSON_KEYPOINT_COUNT = 13
 _LEGACY_PERSON_KEYPOINT_COUNT = 12
+DEFAULT_KEYPOINT_THRESHOLD = 0.5
 
 
 def _expand_legacy_keypoint_names(names: list[str]) -> list[str]:
@@ -145,7 +146,17 @@ class YoloPoseEstimationFunction(YoloFunctionWithShapes):
     # so it doesn't collide with the skeleton label's ID.
     _BOX_LABEL_ID_OFFSET = 1_000_000
 
-    def __init__(self, model: YOLO, *, keypoint_names_path: str | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        model: YOLO,
+        *,
+        keypoint_names_path: str | None = None,
+        keypoint_threshold: float = DEFAULT_KEYPOINT_THRESHOLD,
+        **kwargs,
+    ) -> None:
+        if not math.isfinite(keypoint_threshold) or keypoint_threshold < 0:
+            raise ValueError("keypoint_threshold must be a non-negative number")
+        self._keypoint_threshold = keypoint_threshold
         if keypoint_names_path is None:
             self._keypoint_names = DEFAULT_KEYPOINT_NAMES
         else:
@@ -207,7 +218,7 @@ class YoloPoseEstimationFunction(YoloFunctionWithShapes):
             cvataa.keypoint(
                 kp_index + keypoint_offset,
                 kp.tolist(),
-                outside=kp_conf.item() < 0.5,
+                outside=kp_conf.item() < self._keypoint_threshold,
             )
             for kp_index, (kp, kp_conf) in enumerate(zip(kps, kp_confs))
         )
@@ -227,11 +238,12 @@ class YoloPoseEstimationFunction(YoloFunctionWithShapes):
             yield cvataa.rectangle(
                 label_id + self._BOX_LABEL_ID_OFFSET, box.tolist(), group=group_id
             )
-            yield cvataa.skeleton(
-                label_id,
-                list(self._keypoint_annotations(box, kps, kp_confs)),
-                group=group_id,
-            )
+            if self._keypoint_threshold < 1:
+                yield cvataa.skeleton(
+                    label_id,
+                    list(self._keypoint_annotations(box, kps, kp_confs)),
+                    group=group_id,
+                )
 
 
 class YoloSegmentationFunction(YoloFunctionWithSimpleLabel, YoloFunctionWithShapes):

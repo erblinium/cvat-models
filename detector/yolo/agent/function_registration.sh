@@ -28,7 +28,7 @@ fi
 FILTER=$(jq -nc --arg name "${FUNCTION_NAME}" --arg owner "$USERNAME" \
   '{"and":[{"==":[{"var":"name"},$name]},{"==":[{"var":"owner"},$owner]}]}')
 
-if FUNCTION_ID=$(curl --get --fail --data-urlencode "filter=$FILTER" "${ORG_CURL_ARGS[@]}" "$CVAT_BASE_URL"/api/functions -s --oauth2-bearer "$CVAT_ACCESS_TOKEN" | jq -r '.results[0].id') && [ "$FUNCTION_ID" != "null" ]; then
+if FUNCTION_ID=$(curl --get --fail --data-urlencode "filter=$FILTER" "${ORG_CURL_ARGS[@]}" "$CVAT_BASE_URL"/api/functions -s --oauth2-bearer "$CVAT_ACCESS_TOKEN" | jq -r '.results[0].id') && [[ $FUNCTION_ID =~ ^[0-9]+$ ]]; then
     echo "Found existing function with ID: $FUNCTION_ID, new function won't be created."
     echo "$FUNCTION_ID" > /shared/FUNCTION_ID
 else
